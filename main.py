@@ -6,12 +6,12 @@ from google import genai
 
 app = FastAPI()
 
-# Environment Variables
+# Environment Variables from Render
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Client initialization with new official Google GenAI SDK
+# Gemini Client Init
 client = None
 if GEMINI_API_KEY:
     try:
@@ -19,30 +19,37 @@ if GEMINI_API_KEY:
     except Exception as e:
         print(f"Gemini Client Init Failed: {e}")
 
-
 def send_telegram_message(message: str):
-    """Send alert message to Telegram channel"""
+    """টেলিগ্রাম বটে মেসেজ পাঠানোর সঠিক ফাংশন"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ Telegram Credentials Missing!")
         return None
 
-    url = f"https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage"
+    # টোকেনের ভুল ফরম্যাট ঠিক করার ফিল্টার
+    token = TELEGRAM_BOT_TOKEN.strip()
+    if token.startswith("bot"):
+        token = token[3:]
+
+    # সঠিক টেলিগ্রাম API URL
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
+        "chat_id": TELEGRAM_CHAT_ID, 
+        "text": message, 
         "parse_mode": "Markdown"
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
-        return response.json()
+        res_data = response.json()
+        print(f"📡 Telegram Response: {res_data}")
+        return res_data
     except Exception as e:
-        print(f"Telegram Delivery Error: {e}")
+        print(f"❌ Telegram Delivery Error: {e}")
         return None
-
 
 @app.post("/webhook")
 async def tradingview_webhook(request: Request):
-    """TradingView webhook data processing endpoint"""
+    """ট্রেডিংভিউ ওয়েবহুক রিসিভার"""
     try:
         try:
             data = await request.json()
@@ -50,7 +57,7 @@ async def tradingview_webhook(request: Request):
             data = {}
 
         print(f"📥 Received Payload: {data}")
-
+        
         ticker = data.get("ticker", "EURUSD")
         price = data.get("price", "0.0")
         rsi = data.get("rsi", "50.0")
@@ -60,6 +67,7 @@ async def tradingview_webhook(request: Request):
 
         ai_signal = ""
 
+        # Google Gemini দিয়ে লাইভ মার্কেট এনালাইসিস
         if client:
             try:
                 prompt = (
@@ -84,41 +92,37 @@ async def tradingview_webhook(request: Request):
                     f"- RSI: {rsi}"
                 )
 
-                # ✅ Correct Model Call for google-genai SDK
                 response = client.models.generate_content(
-                    model='gemini-2.0-flash',  # gemini-2.0-flash ব্যবহার করা হয়েছে
+                    model='gemini-2.5-flash',
                     contents=prompt,
                 )
                 ai_signal = response.text
-
             except Exception as gemini_err:
                 print(f"⚠️ Gemini API Error: {gemini_err}")
 
-        # Fallback signal message if API fails
+        # Gemini লিমিট শেষ হয়ে গেলে বা সাড়াশব্দ না দিলে ব্যাকআপ ট্রেড বার্তা
         if not ai_signal:
             ai_signal = (
                 f"🎯 *SNIPER AI ALERT* 🎯\n"
                 f"──────────────────\n"
                 f"*Asset:* {ticker}\n"
                 f"*Timeframe:* {timeframe}\n"
-                f"*Current Price:* {price}\n"
+                f"*Price:* {price}\n"
                 f"*RSI:* {rsi}\n"
                 f"──────────────────\n"
-                f"⚠️ _Check GEMINI_API_KEY in Render Environment._"
+                f"⚠️ _Signal generated using Raw TradingView Engine Data._"
             )
 
         send_telegram_message(ai_signal)
-        return {"status": "success", "info": "Signal dispatched using Google Gemini"}
+        return {"status": "success", "info": "Signal dispatched to Telegram"}
 
     except Exception as e:
         print(f"❌ Core Error: {str(e)}")
         return {"status": "error", "details": str(e)}
 
-
 @app.get("/")
 def home():
-    return {"status": "running", "engine": "Sniper AI Powered by Google Gemini"}
+    return {"status": "running", "engine": "Sniper AI Engine Active"}
 
-
-if __name__ == "__main__":
+if __name__ == "__main__": 
     uvicorn.run(app, host="0.0.0.0", port=10000)
