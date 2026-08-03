@@ -2,7 +2,7 @@ import os
 import requests
 import uvicorn
 from fastapi import FastAPI, Request
-from google import genai
+import google.generativeai as genai
 
 app = FastAPI()
 
@@ -11,26 +11,23 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Gemini Client Init
-client = None
+# Gemini Config
 if GEMINI_API_KEY:
     try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
+        genai.configure(api_key=GEMINI_API_KEY)
     except Exception as e:
-        print(f"Gemini Client Init Failed: {e}")
+        print(f"Gemini Init Error: {e}")
 
 def send_telegram_message(message: str):
-    """টেলিগ্রাম বটে মেসেজ পাঠানোর সঠিক ফাংশন"""
+    """টেলিগ্রাম বটে মেসেজ পাঠানোর নিখুঁত ফাংশন"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ Telegram Credentials Missing!")
         return None
 
-    # টোকেনের ভুল ফরম্যাট ঠিক করার ফিল্টার
     token = TELEGRAM_BOT_TOKEN.strip()
     if token.startswith("bot"):
         token = token[3:]
 
-    # সঠিক টেলিগ্রাম API URL
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     
     payload = {
@@ -68,8 +65,11 @@ async def tradingview_webhook(request: Request):
         ai_signal = ""
 
         # Google Gemini দিয়ে লাইভ মার্কেট এনালাইসিস
-        if client:
+        if GEMINI_API_KEY:
             try:
+                # স্ট্যান্ডার্ড সাপোর্টেড মডেল
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
                     "Analyze the raw market momentum parameters provided and make a logical trading decision. "
@@ -92,15 +92,12 @@ async def tradingview_webhook(request: Request):
                     f"- RSI: {rsi}"
                 )
 
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=prompt,
-                )
+                response = model.generate_content(prompt)
                 ai_signal = response.text
             except Exception as gemini_err:
                 print(f"⚠️ Gemini API Error: {gemini_err}")
 
-        # Gemini লিমিট শেষ হয়ে গেলে বা সাড়াশব্দ না দিলে ব্যাকআপ ট্রেড বার্তা
+        # Gemini থেকে উত্তর না আসলে ব্যাকআপ বার্তা
         if not ai_signal:
             ai_signal = (
                 f"🎯 *SNIPER AI ALERT* 🎯\n"
