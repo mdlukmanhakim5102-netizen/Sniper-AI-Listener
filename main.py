@@ -2,7 +2,7 @@ import os
 import requests
 import uvicorn
 from fastapi import FastAPI, Request
-import google.generativeai as genai
+from google import genai
 
 app = FastAPI()
 
@@ -11,12 +11,16 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Gemini SDK Configure
+# Client initialization with new official Google GenAI SDK
+client = None
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception as e:
+        print(f"Gemini Client Init Failed: {e}")
 
 def send_telegram_message(message: str):
-    """টেলিগ্রাম বটে সিগন্যাল পাঠানোর ফাংশন"""
+    """Send alert message to Telegram channel"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ Telegram Credentials Missing!")
         return None
@@ -36,7 +40,7 @@ def send_telegram_message(message: str):
 
 @app.post("/webhook")
 async def tradingview_webhook(request: Request):
-    """ট্রেডিংভিউ ওয়েবহুক রিসিভার"""
+    """TradingView webhook data processing endpoint"""
     try:
         try:
             data = await request.json()
@@ -54,11 +58,8 @@ async def tradingview_webhook(request: Request):
 
         ai_signal = ""
 
-        # Google Gemini দিয়ে লাইভ মার্কেট এনালাইসিস
-        if GEMINI_API_KEY:
+        if client:
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
                     "Analyze the raw market momentum parameters provided and make a logical trading decision. "
@@ -81,12 +82,16 @@ async def tradingview_webhook(request: Request):
                     f"- RSI: {rsi}"
                 )
 
-                response = model.generate_content(prompt)
+                # ✅ Correct Model Call for google-genai SDK
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                )
                 ai_signal = response.text
             except Exception as gemini_err:
                 print(f"⚠️ Gemini API Error: {gemini_err}")
 
-        # Gemini থেকে উত্তর না আসলে ব্যাকআপ বার্তা
+        # Fallback signal message if API fails
         if not ai_signal:
             ai_signal = (
                 f"🎯 *SNIPER AI ALERT* 🎯\n"
