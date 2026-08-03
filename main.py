@@ -6,8 +6,7 @@ from openai import OpenAI
 
 app = FastAPI()
 
-# পরিবেশ ভেরিয়েবল (Environment Variables) থেকে চাবিগুলো অটো-লোড হবে
-# এগুলো রেন্ডার (Render) ড্যাশবোর্ডের গোপন সিন্দুকে সুরক্ষিত থাকবে
+# পরিবেশ ভেরিয়েবল (Environment Variables)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -17,7 +16,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 def send_telegram_message(message: str):
     """টেলিগ্রাম বটে এআই এর ফাইনাল সিগন্যাল পুশ করার প্রাতিষ্ঠানিক ফাংশন"""
-    url = f"https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID, 
         "text": message, 
@@ -32,9 +31,8 @@ def send_telegram_message(message: str):
 
 @app.post("/webhook")
 async def tradingview_webhook(request: Request):
-    """ট্রেডিংভিউ থেকে লাইভ চার্ট ডেটা স্ক্র্যাপিং মেসেজ রিসিভ করার মূল এন্ডপয়েন্ট"""
+    """ট্রেডিংভিউ থেকে লাইভ চার্ট ডেটা রিসিভ করার মূল এন্ডপয়েন্ট"""
     try:
-        # লাইভ বডি ডাটা রিড করা
         data = await request.json()
         
         ticker = data.get("ticker", "UNKNOWN_ASSET")
@@ -44,7 +42,6 @@ async def tradingview_webhook(request: Request):
         volume_status = data.get("volume", "NORMAL_VOLUME")
         timeframe = data.get("timeframe", "5m")
         
-        # প্রফেশনাল প্রাইস অ্যাকশন সাইকোলজি অনুযায়ী সিস্টেম প্রম্পট মেকিং
         system_prompt = (
             "You are an elite, world-class institutional price action trader. You absolute hate retail indicator traps. "
             "Analyze the raw market momentum parameters provided and make a logical trading decision. "
@@ -71,7 +68,6 @@ async def tradingview_webhook(request: Request):
             f"Provide immediate structural execution plan based on pure price action rules."
         )
         
-        # OpenAI API এর সাথে কানেক্ট করে লাইভ ডেটা প্রসেসিং
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -82,18 +78,18 @@ async def tradingview_webhook(request: Request):
             temperature=0.3
         )
         
-        ai_signal = response.choices.message.content
+        ai_signal = response.choices[0].message.content
         
-        # টেলিগ্রামে সরাসরি পুশ নোটিফিকেশন পাঠানো
         send_telegram_message(ai_signal)
         return {"status": "success", "info": "Signal successfully dispatched to Telegram"}
         
     except Exception as e:
+        print(f"Server Internal Error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/")
 def home():
     return {"status": "running", "engine": "Sniper AI Premium v7 Active"}
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
     uvicorn.run(app, host="0.0.0.0", port=10000)
