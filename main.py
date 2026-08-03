@@ -6,12 +6,12 @@ from google import genai
 
 app = FastAPI()
 
-# পরিবেশ ভেরিয়েবল (Environment Variables)
+# Environment Variables
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Google Gemini Client ইনিশিয়ালাইজেশন
+# Gemini Client Init
 client = None
 if GEMINI_API_KEY:
     try:
@@ -20,9 +20,7 @@ if GEMINI_API_KEY:
         print(f"Gemini Client Init Failed: {e}")
 
 def send_telegram_message(message: str):
-    """টেলিগ্রাম বটে এআই এর ফাইনাল সিগন্যাল পুশ করার প্রাতিষ্ঠানিক ফাংশন"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Telegram Credentials Missing!")
         return None
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -40,15 +38,12 @@ def send_telegram_message(message: str):
 
 @app.post("/webhook")
 async def tradingview_webhook(request: Request):
-    """ট্রেডিংভিউ থেকে লাইভ চার্ট ডেটা রিসিভ করার মূল এন্ডপয়েন্ট"""
     try:
         try:
             data = await request.json()
         except Exception:
             data = {}
 
-        print(f"📥 Received Payload: {data}")
-        
         ticker = data.get("ticker", "EURUSD")
         price = data.get("price", "0.0")
         rsi = data.get("rsi", "50.0")
@@ -58,7 +53,6 @@ async def tradingview_webhook(request: Request):
 
         ai_signal = ""
 
-        # ১. Google Gemini দিয়ে লাইভ মার্কেট এনালাইসিস
         if client:
             try:
                 prompt = (
@@ -84,14 +78,14 @@ async def tradingview_webhook(request: Request):
                 )
 
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-1.5-flash',  # সঠিক এবং সচল মডেল নেম
                     contents=prompt,
                 )
                 ai_signal = response.text
             except Exception as gemini_err:
                 print(f"⚠️ Gemini API Error: {gemini_err}")
 
-        # ২. যদি কোনো কারণে Gemini ফেইল করে তবে সেফটি ডাটা পাঠাবে
+        # Fallback if Gemini is not responding
         if not ai_signal:
             ai_signal = (
                 f"🎯 *SNIPER AI ALERT* 🎯\n"
@@ -104,12 +98,10 @@ async def tradingview_webhook(request: Request):
                 f"⚠️ _Check GEMINI_API_KEY in Render Environment._"
             )
 
-        # টেলিগ্রামে পাঠানো
         send_telegram_message(ai_signal)
         return {"status": "success", "info": "Signal dispatched using Google Gemini"}
 
     except Exception as e:
-        print(f"❌ Core Error: {str(e)}")
         return {"status": "error", "details": str(e)}
 
 @app.get("/")
