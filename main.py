@@ -19,16 +19,17 @@ if GEMINI_API_KEY:
     except Exception as e:
         print(f"Gemini Client Init Failed: {e}")
 
+
 def send_telegram_message(message: str):
     """Send alert message to Telegram channel"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ Telegram Credentials Missing!")
         return None
 
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = f"https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID, 
-        "text": message, 
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
         "parse_mode": "Markdown"
     }
     try:
@@ -37,6 +38,7 @@ def send_telegram_message(message: str):
     except Exception as e:
         print(f"Telegram Delivery Error: {e}")
         return None
+
 
 @app.post("/webhook")
 async def tradingview_webhook(request: Request):
@@ -48,7 +50,7 @@ async def tradingview_webhook(request: Request):
             data = {}
 
         print(f"📥 Received Payload: {data}")
-        
+
         ticker = data.get("ticker", "EURUSD")
         price = data.get("price", "0.0")
         rsi = data.get("rsi", "50.0")
@@ -84,10 +86,11 @@ async def tradingview_webhook(request: Request):
 
                 # ✅ Correct Model Call for google-genai SDK
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-2.0-flash',  # gemini-2.0-flash ব্যবহার করা হয়েছে
                     contents=prompt,
                 )
                 ai_signal = response.text
+
             except Exception as gemini_err:
                 print(f"⚠️ Gemini API Error: {gemini_err}")
 
@@ -111,9 +114,11 @@ async def tradingview_webhook(request: Request):
         print(f"❌ Core Error: {str(e)}")
         return {"status": "error", "details": str(e)}
 
+
 @app.get("/")
 def home():
     return {"status": "running", "engine": "Sniper AI Powered by Google Gemini"}
 
-if __name__ == "__main__": 
+
+if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=10000)
