@@ -2,7 +2,7 @@ import os
 import requests
 import uvicorn
 from fastapi import FastAPI, Request
-from google import genai
+import google.generativeai as genai
 
 app = FastAPI()
 
@@ -11,13 +11,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Gemini Client Init
-client = None
+# Gemini SDK Configure
 if GEMINI_API_KEY:
-    try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-    except Exception as e:
-        print(f"Gemini Client Init Failed: {e}")
+    genai.configure(api_key=GEMINI_API_KEY)
 
 def send_telegram_message(message: str):
     """টেলিগ্রাম বটে সিগন্যাল পাঠানোর ফাংশন"""
@@ -58,9 +54,11 @@ async def tradingview_webhook(request: Request):
 
         ai_signal = ""
 
-        # Google Gemini দিয়ে লাইভ মার্কেট এনালাইসিস
-        if client:
+        # Google Gemini দিয়ে লাইভ মার্কেট এনালাইসিস
+        if GEMINI_API_KEY:
             try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
                     "Analyze the raw market momentum parameters provided and make a logical trading decision. "
@@ -83,11 +81,7 @@ async def tradingview_webhook(request: Request):
                     f"- RSI: {rsi}"
                 )
 
-                # 🛠️ ঠিক করা লাইন (gemini-2.5-flash এর বদলে gemini-1.5-flash দেওয়া হয়েছে)
-                response = client.models.generate_content(
-                    model='gemini-1.5-flash',
-                    contents=prompt,
-                )
+                response = model.generate_content(prompt)
                 ai_signal = response.text
             except Exception as gemini_err:
                 print(f"⚠️ Gemini API Error: {gemini_err}")
