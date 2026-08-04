@@ -6,35 +6,34 @@ import google.generativeai as genai
 
 app = FastAPI()
 
-# Environment Variables from Render
+# Render-এর Environment Variables থেকে সিক্রেট কি-গুলো নেওয়া
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Gemini Config
+# Gemini AI কনফিগারেশন (Error ফিক্সড)
 if GEMINI_API_KEY:
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
+        genai.configure(api_key=GEMINI_API_KEY.strip())
     except Exception as e:
         print(f"Gemini Init Error: {e}")
 
 def send_telegram_message(message: str):
-    """টেলিগ্রাম বটে মেসেজ পাঠানোর নিখুঁত ফাংশন"""
+    """টেলিগ্রাম বটে মেসেজ পাঠানোর পারফেক্ট ফাংশন"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ Telegram Credentials Missing!")
         return None
-
+    
+    # টোকেন থেকে স্পেস ট্রিম করা (টোকেন কাটার লজিক ফিক্স করা হয়েছে)
     token = TELEGRAM_BOT_TOKEN.strip()
-    if token.startswith("bot"):
-        token = token[3:]
-
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    url = f"https://telegram.org{token}/sendMessage"
     
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID, 
-        "text": message, 
+        "chat_id": TELEGRAM_CHAT_ID.strip(),
+        "text": message,
         "parse_mode": "Markdown"
     }
+    
     try:
         response = requests.post(url, json=payload, timeout=10)
         res_data = response.json()
@@ -52,7 +51,7 @@ async def tradingview_webhook(request: Request):
             data = await request.json()
         except Exception:
             data = {}
-
+            
         print(f"📥 Received Payload: {data}")
         
         ticker = data.get("ticker", "EURUSD")
@@ -61,14 +60,14 @@ async def tradingview_webhook(request: Request):
         direction = data.get("direction", "NEW_CANDLE_OPENED")
         volume_status = data.get("volume", "CHART_ENGINE_TRIGGER")
         timeframe = data.get("timeframe", "1m")
-
+        
         ai_signal = ""
 
-        # Google Gemini দিয়ে লাইভ মার্কেট এনালাইসিস
+        # Google Gemini দিয়ে লাইভ মার্কেট এনালাইসিস (মডেল পাথ ফিক্সড)
         if GEMINI_API_KEY:
             try:
-                # স্ট্যান্ডার্ড সাপোর্টেড মডেল
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                # v1beta 404 এরর এড়াতে সুনির্দিষ্ট মডেল পাথ ব্যবহার করা হয়েছে
+                model = genai.GenerativeModel('models/gemini-1.5-flash')
                 
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
@@ -91,13 +90,12 @@ async def tradingview_webhook(request: Request):
                     f"- Volume Status: {volume_status}\n"
                     f"- RSI: {rsi}"
                 )
-
                 response = model.generate_content(prompt)
                 ai_signal = response.text
             except Exception as gemini_err:
                 print(f"⚠️ Gemini API Error: {gemini_err}")
 
-        # Gemini থেকে উত্তর না আসলে ব্যাকআপ বার্তা
+        # Gemini থেকে কোনো কারণে উত্তর না আসলে ব্যাকআপ বার্তা
         if not ai_signal:
             ai_signal = (
                 f"🎯 *SNIPER AI ALERT* 🎯\n"
@@ -109,10 +107,10 @@ async def tradingview_webhook(request: Request):
                 f"──────────────────\n"
                 f"⚠️ _Signal generated using Raw TradingView Engine Data._"
             )
-
+            
         send_telegram_message(ai_signal)
         return {"status": "success", "info": "Signal dispatched to Telegram"}
-
+        
     except Exception as e:
         print(f"❌ Core Error: {str(e)}")
         return {"status": "error", "details": str(e)}
@@ -121,5 +119,7 @@ async def tradingview_webhook(request: Request):
 def home():
     return {"status": "running", "engine": "Sniper AI Engine Active"}
 
-if __name__ == "__main__": 
-    uvicorn.run(app, host="0.0.0.0", port=10000)
+if __name__ == "__main__":
+    # Render-এর ডাইনামিক পোর্ট অ্যাসাইনমেন্ট লজিক
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
