@@ -6,12 +6,12 @@ import google.generativeai as genai
 
 app = FastAPI()
 
-# Render-এর Environment Variables থেকে সিক্রেট কি-গুলো নেওয়া
+# Render Environment Variables
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Gemini AI কনফিগারেশন (Error ফিক্সড)
+# Gemini Config
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY.strip())
@@ -19,14 +19,14 @@ if GEMINI_API_KEY:
         print(f"Gemini Init Error: {e}")
 
 def send_telegram_message(message: str):
-    """টেলিগ্রাম বটে মেসেজ পাঠানোর পারফেক্ট ফাংশন"""
+    """টেলিগ্রাম বটে মেসেজ পাঠানোর নিখুঁত ফাংশন (মার্কডাউন ফলব্যাক প্রোটেকশনসহ)"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ Telegram Credentials Missing!")
         return None
     
-    # টোকেন থেকে স্পেস ট্রিম করা (টোকেন কাটার লজিক ফিক্স করা হয়েছে)
     token = TELEGRAM_BOT_TOKEN.strip()
-    url = f"https://telegram.org{token}/sendMessage"
+    # ১. সঠিক অফিশিয়াল এপিআই এন্ডপয়েন্ট নিশ্চিত করা হলো
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     
     payload = {
         "chat_id": TELEGRAM_CHAT_ID.strip(),
@@ -34,18 +34,34 @@ def send_telegram_message(message: str):
         "parse_mode": "Markdown"
     }
     
+    # ৪. জেমিনির স্পেশাল ক্যারেক্টার জনিত মার্কডাউন পার্স এরর হ্যান্ডলিং ফলব্যাক
     try:
         response = requests.post(url, json=payload, timeout=10)
         res_data = response.json()
+        
+        # যদি প্রথমবার মার্কডাউন এররের কারণে মেসেজ ফেইল করে (উদা: Error 400)
+        if not response.ok:
+            print("⚠️ Markdown parse failed, retrying with raw text...")
+            payload.pop("parse_mode", None)
+            response = requests.post(url, json=payload, timeout=10)
+            res_data = response.json()
+            
         print(f"📡 Telegram Response: {res_data}")
         return res_data
+        
     except Exception as e:
-        print(f"❌ Telegram Delivery Error: {e}")
-        return None
+        print("⚠️ Direct request failed, trying fallback without parse_mode...")
+        try:
+            payload.pop("parse_mode", None)
+            response = requests.post(url, json=payload, timeout=10)
+            return response.json()
+        except Exception as fallback_err:
+            print(f"❌ Telegram Delivery Error: {fallback_err}")
+            return None
 
 @app.post("/webhook")
 async def tradingview_webhook(request: Request):
-    """ট্রেডিংভিউ ওয়েবহুক রিসিভার"""
+    """ট্রেডিংভিউ ওয়েবহুক রিসিভার (আলটিমেট প্রোডাকশন রেডি)"""
     try:
         try:
             data = await request.json()
@@ -54,7 +70,15 @@ async def tradingview_webhook(request: Request):
             
         print(f"📥 Received Payload: {data}")
         
-        ticker = data.get("ticker", "EURUSD")
+        # ৩. এম্পটি পে-লোড বা ফাঁকা ডাটা আসলে প্রসেসিং ইগনোর করা
+        if not data:
+            return {
+                "status": "ignored",
+                "reason": "Empty payload"
+            }
+        
+        # ২. ডাবল কি হ্যান্ডলিং (ticker বা asset দুই ধরনের payload-ই কাজ করবে)
+        ticker = data.get("ticker") or data.get("asset", "EURUSD")
         price = data.get("price", "0.0")
         rsi = data.get("rsi", "50.0")
         direction = data.get("direction", "NEW_CANDLE_OPENED")
@@ -63,11 +87,10 @@ async def tradingview_webhook(request: Request):
         
         ai_signal = ""
 
-        # Google Gemini দিয়ে লাইভ মার্কেট এনালাইসিস (মডেল পাথ ফিক্সড)
+        # Google Gemini লাইভ মার্কেট এনালাইসিস
         if GEMINI_API_KEY:
             try:
-                # v1beta 404 এরর এড়াতে সুনির্দিষ্ট মডেল পাথ ব্যবহার করা হয়েছে
-                model = genai.GenerativeModel('models/gemini-1.5-flash')
+                model = genai.GenerativeModel('models/gemini-pro')
                 
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
@@ -75,32 +98,39 @@ async def tradingview_webhook(request: Request):
                     "Output your decision strictly ONLY in this exact text format:\n\n"
                     "🎯 SNIPER AI LIVE SIGNAL 🎯\n"
                     "──────────────────\n"
-                    "Asset: [Insert Ticker Here]\n"
-                    "Timeframe: [Insert Timeframe Here]\n"
+                    f"Ticker: {ticker}\n"
+                    f"Timeframe: {timeframe}\n"
                     "Action: [BUY / SELL / NO TRADE]\n"
-                    "Entry Price: [Insert Entry Price]\n"
+                    f"Entry Price: {price}\n"
                     "Take Profit: [Provide Logical Target Price]\n"
                     "Stop Loss: [Provide Tight Risk Invalidated Price]\n"
                     "──────────────────\n"
                     f"Analysis: [One short sentence explaining the institutional liquidity reason]\n\n"
                     f"Market Update Data:\n"
-                    f"- Asset: {ticker} ({timeframe} chart)\n"
+                    f"- Ticker: {ticker} ({timeframe} chart)\n"
                     f"- Price: {price}\n"
                     f"- Momentum: {direction}\n"
                     f"- Volume Status: {volume_status}\n"
                     f"- RSI: {rsi}"
                 )
                 response = model.generate_content(prompt)
-                ai_signal = response.text
+                
+                # ক্র্যাশ প্রোটেকশন সেফটি লজিক
+                if hasattr(response, "text") and response.text:
+                    ai_signal = response.text
+                else:
+                    ai_signal = ""
+                    print("⚠️ Gemini response did not contain text.")
+                    
             except Exception as gemini_err:
                 print(f"⚠️ Gemini API Error: {gemini_err}")
 
-        # Gemini থেকে কোনো কারণে উত্তর না আসলে ব্যাকআপ বার্তা
+        # ব্যাকআপ অ্যালার্ট (যদি জেমিনি রেসপন্স খালি থাকে)
         if not ai_signal:
             ai_signal = (
                 f"🎯 *SNIPER AI ALERT* 🎯\n"
                 f"──────────────────\n"
-                f"*Asset:* {ticker}\n"
+                f"*Ticker:* {ticker}\n"
                 f"*Timeframe:* {timeframe}\n"
                 f"*Price:* {price}\n"
                 f"*RSI:* {rsi}\n"
@@ -120,6 +150,5 @@ def home():
     return {"status": "running", "engine": "Sniper AI Engine Active"}
 
 if __name__ == "__main__":
-    # Render-এর ডাইনামিক পোর্ট অ্যাসাইনমেন্ট লজিক
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
