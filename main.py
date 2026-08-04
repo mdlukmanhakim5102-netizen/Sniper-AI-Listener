@@ -90,7 +90,7 @@ async def tradingview_webhook(request: Request):
         if GEMINI_API_KEY:
             try:
                 # v1beta 404 ক্লাউড এরর এড়াতে সুনির্দিষ্ট মডেল পাথ কনফিগারেশন
-                model = genai.GenerativeModel('models/gemini-1.5-flash')
+                model = genai.GenerativeModel("gemini-1.5-flash")
                 
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
