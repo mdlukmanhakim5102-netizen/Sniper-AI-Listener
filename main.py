@@ -89,8 +89,9 @@ async def tradingview_webhook(request: Request):
 
         # Google Gemini লাইভ মার্কেট এনালাইসিস
         if GEMINI_API_KEY:
-            try:
-                model = genai.GenerativeModel('models/gemini-pro')
+            try:model = genai.GenerativeModel(
+    "gemini-1.5-flash"
+)
                 
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
