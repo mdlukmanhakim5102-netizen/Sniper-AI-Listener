@@ -85,8 +85,8 @@ async def tradingview_webhook(request: Request):
 
         if GEMINI_API_KEY:
             try:
-                # ✅ Fixed Model (2026 compatible)
-                model = genai.GenerativeModel("gemini-2.0-flash")
+                # ✅ Fixed Model: আপনার অনুরোধ অনুযায়ী এখানে 'gemini-3.6-flash' বিল্ড করা হয়েছে
+                model = genai.GenerativeModel("gemini-3.6-flash")
                
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
