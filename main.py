@@ -19,13 +19,13 @@ if GEMINI_API_KEY:
         print(f"Gemini Init Error: {e}")
 
 def send_telegram_message(message: str):
-    """টেলিগ্রাম বটে মেসেজ পাঠানোর নিখুঁত ফাংশন (মার্কডাউন ফলব্যাক প্রোটেকশনসহ)"""
+    """টেলিগ্রাম বটে মেসেজ পাঠানোর নিখুঁত প্রোডাকশন ফাংশন"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ Telegram Credentials Missing!")
         return None
     
     token = TELEGRAM_BOT_TOKEN.strip()
-    # ১. সঠিক অফিশিয়াল এপিআই এন্ডপয়েন্ট নিশ্চিত করা হলো
+    # চূড়ান্ত ডোমেন সংশোধন: অবশই api.telegram.org হতে হবে
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     
     payload = {
@@ -34,12 +34,11 @@ def send_telegram_message(message: str):
         "parse_mode": "Markdown"
     }
     
-    # ৪. জেমিনির স্পেশাল ক্যারেক্টার জনিত মার্কডাউন পার্স এরর হ্যান্ডলিং ফলব্যাক
+    # জেমিনির স্পেশাল ক্যারেক্টার জনিত মার্কডাউন পার্স এরর হ্যান্ডলিং ফলব্যাক
     try:
         response = requests.post(url, json=payload, timeout=10)
         res_data = response.json()
         
-        # যদি প্রথমবার মার্কডাউন এররের কারণে মেসেজ ফেইল করে (উদা: Error 400)
         if not response.ok:
             print("⚠️ Markdown parse failed, retrying with raw text...")
             payload.pop("parse_mode", None)
@@ -61,7 +60,7 @@ def send_telegram_message(message: str):
 
 @app.post("/webhook")
 async def tradingview_webhook(request: Request):
-    """ট্রেডিংভিউ ওয়েবহুক রিসিভার (আলটিমেট প্রোডাকশন রেডি)"""
+    """ট্রেডিংভিউ ওয়েবহুক রিসিভার (Gemini 1.5 Flash ভার্সন)"""
     try:
         try:
             data = await request.json()
@@ -70,14 +69,14 @@ async def tradingview_webhook(request: Request):
             
         print(f"📥 Received Payload: {data}")
         
-        # ৩. এম্পটি পে-লোড বা ফাঁকা ডাটা আসলে প্রসেসিং ইগনোর করা
+        # এম্পটি পে-লোড বা ফাঁকা ডাটা আসলে প্রসেসিং ইগনোর করা
         if not data:
             return {
                 "status": "ignored",
                 "reason": "Empty payload"
             }
         
-        # ২. ডাবল কি হ্যান্ডলিং (ticker বা asset দুই ধরনের payload-ই কাজ করবে)
+        # ডাবল কি হ্যান্ডলিং (ticker বা asset দুই ধরনের payload-ই কাজ করবে)
         ticker = data.get("ticker") or data.get("asset", "EURUSD")
         price = data.get("price", "0.0")
         rsi = data.get("rsi", "50.0")
@@ -89,9 +88,9 @@ async def tradingview_webhook(request: Request):
 
         # Google Gemini লাইভ মার্কেট এনালাইসিস
         if GEMINI_API_KEY:
-            try:model = genai.GenerativeModel(
-    "gemini-1.5-flash"
-)
+            try:
+                # v1beta 404 ক্লাউড এরর এড়াতে সুনির্দিষ্ট মডেল পাথ কনফিগারেশন
+                model = genai.GenerativeModel('models/gemini-1.5-flash')
                 
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
