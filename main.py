@@ -25,7 +25,6 @@ def send_telegram_message(message: str):
         return None
     
     token = TELEGRAM_BOT_TOKEN.strip()
-    # চূড়ান্ত ডোমেন সংশোধন: অবশই api.telegram.org হতে হবে
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     
     payload = {
@@ -60,7 +59,7 @@ def send_telegram_message(message: str):
 
 @app.post("/webhook")
 async def tradingview_webhook(request: Request):
-    """ট্রেডিংভিউ ওয়েবহুক রিসিভার (Gemini 1.5 Flash ভার্সন)"""
+    """ট্রেডিংভিউ ওয়েবহুক রিসিভার (Gemini 2.5 Flash ভার্সন)"""
     try:
         try:
             data = await request.json()
@@ -89,8 +88,8 @@ async def tradingview_webhook(request: Request):
         # Google Gemini লাইভ মার্কেট এনালাইসিস
         if GEMINI_API_KEY:
             try:
-                # v1beta 404 ক্লাউড এরর এড়াতে সুনির্দিষ্ট মডেল পাথ কনফিগারেশন
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                # মডেল নাম আপডেট করে gemini-2.5-flash পাথ কনফিগার করা হলো
+                model = genai.GenerativeModel("models/gemini-2.5-flash")
                 
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
@@ -115,12 +114,12 @@ async def tradingview_webhook(request: Request):
                 )
                 response = model.generate_content(prompt)
                 
-                # ক্র্যাশ প্রোটেকশন সেফটি লজিক
-                if hasattr(response, "text") and response.text:
+                # আপনার দেওয়া সুপার সেফ ট্রাই-ক্যাচ টেক্সট এক্সট্রাকশন লজিক
+                try:
                     ai_signal = response.text
-                else:
+                except Exception:
                     ai_signal = ""
-                    print("⚠️ Gemini response did not contain text.")
+                    print("⚠️ Gemini response text generation failed (blocked or empty).")
                     
             except Exception as gemini_err:
                 print(f"⚠️ Gemini API Error: {gemini_err}")
