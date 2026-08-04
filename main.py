@@ -23,30 +23,29 @@ def send_telegram_message(message: str):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ Telegram Credentials Missing!")
         return None
-    
+   
     token = TELEGRAM_BOT_TOKEN.strip()
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    
+   
     payload = {
         "chat_id": TELEGRAM_CHAT_ID.strip(),
         "text": message,
         "parse_mode": "Markdown"
     }
-    
-    # জেমিনির স্পেশাল ক্যারেক্টার জনিত মার্কডাউন পার্স এরর হ্যান্ডলিং ফলব্যাক
+   
     try:
         response = requests.post(url, json=payload, timeout=10)
         res_data = response.json()
-        
+       
         if not response.ok:
             print("⚠️ Markdown parse failed, retrying with raw text...")
             payload.pop("parse_mode", None)
             response = requests.post(url, json=payload, timeout=10)
             res_data = response.json()
-            
+           
         print(f"📡 Telegram Response: {res_data}")
         return res_data
-        
+       
     except Exception as e:
         print("⚠️ Direct request failed, trying fallback without parse_mode...")
         try:
@@ -59,38 +58,36 @@ def send_telegram_message(message: str):
 
 @app.post("/webhook")
 async def tradingview_webhook(request: Request):
-    """ট্রেডিংভিউ ওয়েবহুক রিসিভার (Gemini 2.5 Flash ভার্সন)"""
+    """ট্রেডিংভিউ ওয়েবহুক রিসিভার"""
     try:
         try:
             data = await request.json()
         except Exception:
             data = {}
-            
+           
         print(f"📥 Received Payload: {data}")
-        
-        # এম্পটি পে-লোড বা ফাঁকা ডাটা আসলে প্রসেসিং ইগনোর করা
+       
         if not data:
             return {
                 "status": "ignored",
                 "reason": "Empty payload"
             }
-        
-        # ডাবল কি হ্যান্ডলিং (ticker বা asset দুই ধরনের payload-ই কাজ করবে)
+       
+        # ticker অথবা asset দুটোই সাপোর্ট করে
         ticker = data.get("ticker") or data.get("asset", "EURUSD")
         price = data.get("price", "0.0")
         rsi = data.get("rsi", "50.0")
         direction = data.get("direction", "NEW_CANDLE_OPENED")
         volume_status = data.get("volume", "CHART_ENGINE_TRIGGER")
         timeframe = data.get("timeframe", "1m")
-        
+       
         ai_signal = ""
 
-        # Google Gemini লাইভ মার্কেট এনালাইসিস
         if GEMINI_API_KEY:
             try:
-                # মডেল নাম আপডেট করে gemini-2.5-flash পাথ কনফিগার করা হলো
-                model = genai.GenerativeModel("models/gemini-2.5-flash")
-                
+                # ✅ Fixed Model (2026 compatible)
+                model = genai.GenerativeModel("gemini-2.0-flash")
+               
                 prompt = (
                     "You are an elite, world-class institutional price action trader. "
                     "Analyze the raw market momentum parameters provided and make a logical trading decision. "
@@ -113,18 +110,17 @@ async def tradingview_webhook(request: Request):
                     f"- RSI: {rsi}"
                 )
                 response = model.generate_content(prompt)
-                
-                # আপনার দেওয়া সুপার সেফ ট্রাই-ক্যাচ টেক্সট এক্সট্রাকশন লজিক
+               
                 try:
                     ai_signal = response.text
                 except Exception:
                     ai_signal = ""
                     print("⚠️ Gemini response text generation failed (blocked or empty).")
-                    
+                   
             except Exception as gemini_err:
                 print(f"⚠️ Gemini API Error: {gemini_err}")
 
-        # ব্যাকআপ অ্যালার্ট (যদি জেমিনি রেসপন্স খালি থাকে)
+        # Backup Alert
         if not ai_signal:
             ai_signal = (
                 f"🎯 *SNIPER AI ALERT* 🎯\n"
@@ -136,10 +132,10 @@ async def tradingview_webhook(request: Request):
                 f"──────────────────\n"
                 f"⚠️ _Signal generated using Raw TradingView Engine Data._"
             )
-            
+           
         send_telegram_message(ai_signal)
         return {"status": "success", "info": "Signal dispatched to Telegram"}
-        
+       
     except Exception as e:
         print(f"❌ Core Error: {str(e)}")
         return {"status": "error", "details": str(e)}
